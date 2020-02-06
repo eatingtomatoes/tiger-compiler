@@ -1,0 +1,22 @@
+type Int is primitive
+
+type Any is primitive
+
+type Void is primitive
+
+type Str is primitive
+
+fn printf(fmt: Str, x: Int, y: Int, z: Int): Void
+
+global fn main(): Int := let
+  fn printBoard(x: Int): Void := (
+    for i: Int := 1 to 3 do (
+      for j: Int := 1 to 3 do ( 
+        printf("(%d %d %d) ", x, i, j)
+      )
+    )
+  )
+in
+  printBoard(6);
+  0
+end

@@ -1,0 +1,28 @@
+type Int is primitive
+
+type Any is primitive
+
+type Void is primitive
+
+type Str is primitive
+
+fn printf(fmt: Str, x: Int): Void
+
+global fn main(): Int := let
+  type IntArray = array of Int
+  var row: IntArray := IntArray[10] of 0
+
+  type Pair = { x: Int, y: Int }
+
+  fn printBoard(n: Int, m: Pair): Int := (
+    for i: Int := 1 to n-1 do (
+      for j: Int := 1 to n-1 do (
+        printf(if row[i] = j then " 0" else " .")
+      )
+    );
+    printf("%d ", m.x);
+    0
+  )
+in
+   printBoard(1, 2)
+end  

@@ -1,0 +1,20 @@
+type Int is primitive
+
+type Any is primitive
+
+type Void is primitive
+
+type Str is primitive
+
+fn printf(fmt: Str, x: Int, y: Int): Void
+
+fn alloc(size: Int): Int
+
+type Pair = { x: Int, y: Int}
+
+global fn main(): Int := let
+  var p: Pair := Pair { x=1, y=2 }
+in
+  printf("%d %d", p.x, p.y);
+  0
+end
