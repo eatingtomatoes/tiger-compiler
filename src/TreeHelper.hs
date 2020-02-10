@@ -94,3 +94,6 @@ call name' = CallExpr (NameExpr name')
 
 callPrimitive :: Char8.ByteString -> [Expr] -> Expr
 callPrimitive name' = call (labelFrom name')
+
+dummyExpr :: Expr
+dummyExpr = name $ labelFrom $ Char8.pack "dummyExpr"

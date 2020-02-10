@@ -13,6 +13,8 @@ data TransError
   | SeqExprNotEndedWithExpr [Expr] 
   | NonExprAsArguments Expr
   | Unnotable Expr
+  | FunArgsNumError VarId [TypeBinding] [TypeId]
+  | FieldInitializationNumError TypeId [ValueBinding]
   | LetExprMustReturnValue Expr
   | SeqExprMustReturnValue Expr
   | FunArgMustBeExpression Expr

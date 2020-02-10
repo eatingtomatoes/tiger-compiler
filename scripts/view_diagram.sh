@@ -17,6 +17,7 @@ extract_decs | while read some; do
     TITLE=$(echo $some | extract_title)
     DOT_PATH=/tmp/dot/${TITLE}.dot
     SVG_PATH=/tmp/dot/${TITLE}.svg
+    echo "process graph: " $TITLE
     echo $some > $DOT_PATH
     dot -Tsvg $DOT_PATH -o $SVG_PATH
     display $SVG_PATH &

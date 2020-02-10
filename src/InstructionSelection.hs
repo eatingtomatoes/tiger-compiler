@@ -8,7 +8,6 @@
 
 module InstructionSelection
   ( selectInstructions
-  , spill
   , removeRedundantJump
   ) where
 
@@ -18,7 +17,8 @@ import Control.Monad.State
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy.Char8 as Char8
 import Control.Lens (zoom, _1, _2)
--- import Debug.Pretty.Simple
+import Debug.Pretty.Simple
+import Data.List (splitAt)
 
 import Temp
 import TempHelper
@@ -27,9 +27,11 @@ import Tree
 import Instruction
 import Frame
 import Fragment
+import Util
 
 import Linear
 import Trace
+
 
 data SelectionError
   = UnexpectedStmt Stmt
@@ -61,51 +63,27 @@ selectFunHeader Frame{..} = execWriter $ do
   emitPlain "mov %r, %r" [rbp] [rsp] $ Two (Dst 0) (Src 0)
   emitPlain ("add %r, " <~ _frPointer) [rsp] [rsp] $ One (Dst 0)
   emitMove "mov [%r - 8], %r" [] [rbp, r10] $ Two (Src 0) (Src 1)
-  zipWithM f _frFormalsList paramRegisters
-  where
+  zipWithM_ f _frFormalsList paramRegisters
+  forM [ rbx, r12, r13, r14, r15 ] $ \temp -> do
+  -- forM [ rbx ] $ \temp -> do   
+    emitPlain "push %r" [rsp] [rsp, temp] $ One (Src 1)
+  where 
     f temp reg = do
-      emitMove "mov %r, %r" [temp] [reg] $ Two (Dst 0) (Src 0)    
+      emitMove "mov %r, %r" [temp] [reg] $ Two (Dst 0) (Src 0)
 
+    paramRegisters :: [Temp]
+    paramRegisters = [ rdi, rsi, rdx, rcx, r8, r9 ]
+  
 selectFunTail :: [Instruction]
 selectFunTail = execWriter $ do
+  forM_ (reverse [ rbx, r12, r13, r14, r15 ]) $ \temp -> do
+  -- forM_ [ rbx ] $ \temp -> do     
+    emitPlain "pop %r" [rsp, temp] [rsp] $ One (Dst 1)  
   emitPlain "leave" [rbp, rsp] [rbp] Zero
   emitPlain "ret" [rsp] [rsp] Zero
 
 selectFunBody :: InstSel m => [Stmt] -> m [Instruction]
 selectFunBody body = execWriterT $ runReaderT (mapM_ codeStmt body) Nothing
-
-spill :: Temp -> ProcFrag -> ProcFrag 
-spill temp ProcFrag{..} = ProcFrag
-  { _pfFrame = frame
-  , _pfBody = body
-  }
-  where
-    (body, frame) = flip runState _pfFrame $ do
-      fp <- framePointer
-      buff <- flip toExpr fp <$> allocLocal
-      return $ spillStmt buff _pfBody
-    spillStmt buff stmt = case stmt of
-      SeqStmt s1 s2 -> SeqStmt (trs s1) (trs s2)
-      LabelStmt _ -> stmt
-      JumpStmt e dst -> JumpStmt (tre e) dst
-      CJumpStmt op e1 e2 l1 l2 -> CJumpStmt op (tre e1) (tre e2) l1 l2
-      MoveStmt e1 e2 -> MoveStmt (tre e1) (tre e2)
-      ExprStmt e -> ExprStmt (tre e)
-      where
-        trs = spillStmt buff
-        tre = spillExpr buff
-    spillExpr buff expr = case expr of
-      BinOpExpr op e1 e2 -> BinOpExpr op (tre e1) (tre e2)
-      UnOpExpr op e -> UnOpExpr op (tre e)
-      MemExpr e -> MemExpr (tre e)
-      TempExpr t -> if t == temp then buff else expr
-      ESeqExpr s e -> ESeqExpr (trs s) (tre e)
-      NameExpr _ -> expr
-      ConstExpr  _ -> expr
-      CallExpr e args -> CallExpr (tre e) (fmap tre args)
-      where
-        trs = spillStmt buff        
-        tre = spillExpr buff
 
 removeRedundantJump :: [Instruction] -> [Instruction]
 removeRedundantJump (j@(Jmp "jmp" dst) : l@(Lab label) : rest)
@@ -161,28 +139,30 @@ plainBinary name e1 e2 = do
     (MemExpr (BinOpExpr Plus (ConstExpr x) e1'), ConstExpr y) -> do
       r1 <- codeExpr e1'
       temp <- allocTemp
-      emitPlain (name ++ " qword [%r + " <~ x ++ "], " <~ y) [] [r1] $ One (Src 0)
-      emitMove ("mov %r, qword [%r + " <~ x ++ "]") [temp] [r1] $ Two (Dst 0) (Src 0)
+      emitMove ("mov %r, [%r + " <~ x ++ "]") [temp] [r1] $ Two (Dst 0) (Src 0)
+      emitPlain (name ++ " %r, " <~ y) [temp] [temp] $ One (Src 0)
       return temp
 
     (MemExpr (BinOpExpr Plus e1' (ConstExpr x)), ConstExpr y) -> do
       r1 <- codeExpr e1'
       temp <- allocTemp
-      emitPlain (name ++ " qword [%r + " <~ x ++ "], " <~ y) [] [r1] $ One (Src 0)
-      emitMove ("mov %r, qword [%r + " <~ x ++ "]") [temp] [r1] $ Two (Dst 0) (Src 0)      
+      emitMove ("mov %r, [%r + " <~ x ++ "]") [temp] [r1] $ Two (Dst 0) (Src 0)
+      emitPlain (name ++ " %r, " <~ y) [temp] [temp] $ One (Src 0)
       return temp
 
     (MemExpr e1', ConstExpr y) -> do
       r1 <- codeExpr e1'
-      temp <- allocTemp 
-      emitPlain (name ++ " [%r], " <~ y) [r1] [r1] $ One (Src 0)
+      temp <- allocTemp
       emitMove "mov %r, [%r]" [temp] [r1] $ Two (Dst 0) (Src 0)
+      emitPlain (name ++ " %r, " <~ y) [temp] [temp] $ One (Src 0)
       return temp
 
     (e1', MemExpr e2') -> do
       r1 <- codeExpr e1'
       r2 <- codeExpr e2'
-      emitPlain (name ++ " %r, [%r]") [r1] [r1, r2] $ Two (Src 0) (Src 1)
+      temp <- allocTemp
+      emitMove "mov %r, %r" [temp] [r1] $ Two (Dst 0) (Src 0)
+      emitPlain (name ++ " %r, [%r]") [temp] [temp, r2] $ Two (Src 0) (Src 1)
       return r1
 
     (MemExpr e1', e2') -> do
@@ -192,24 +172,28 @@ plainBinary name e1 e2 = do
       emitMove "mov %r, [%r]" [temp] [r1] $ Two (Dst 0) (Src 0)
       emitPlain (name ++ " %r, %r") [temp] [temp, r2] $ Two (Src 0) (Src 1)
       return temp
-      
+                               
     (e1', ConstExpr y) -> do
       r1 <- codeExpr e1'
-      emitPlain (name ++ " %r, " ++ show y) [r1] [r1] $ One (Src 0)
-      return r1
+      temp <- allocTemp
+      emitMove "mov %r, %r" [temp] [r1] $ Two (Dst 0) (Src 0)
+      emitPlain (name ++ " %r, " <~ y) [temp] [temp] $ One (Src 0)
+      return temp
       
     (ConstExpr x, e2') -> do
       r2 <- codeExpr e2'
       temp <- allocTemp
-      emitMove ("mov %r, " ++ show x) [temp] [] $ One (Dst 0)
+      emitMove ("mov %r, " <~ x) [temp] [] $ One (Dst 0)
       emitPlain (name ++ " %r, %r") [temp] [temp, r2] $ Two (Src 0) (Src 1)
       return temp
       
     (e1', e2') -> do
       r1 <- codeExpr e1'
       r2 <- codeExpr e2'
-      emitPlain (name ++ " %r, %r") [r1] [r1, r2] $ Two (Src 0) (Src 1)
-      return r1
+      temp <- allocTemp
+      emitMove "mov %r, %r" [temp] [r1] $ Two (Dst 0) (Src 0)
+      emitPlain (name ++ " %r, %r") [temp] [temp, r2] $ Two (Src 0) (Src 1)
+      return temp
 
 itimes :: SelectionContext m => Expr -> Expr -> m Temp
 itimes e1 e2 = do
@@ -400,9 +384,9 @@ move stmt e1 e2 = do
   temp <- allocTemp
   case (e1, e2) of
     (TempExpr r1, CallExpr (NameExpr label) args) -> do
-      (rdst, rsrc) <- codeArgs args
-      emitPlain ("call " ++ Char8.unpack (_lbString label)) (rv : rdst) rsrc Zero
-      emitMove "mov %r, %r" [r1] [rv] $ Two (Dst 0) (Src 0) 
+      withArgs False args $ \dsts srcs -> do
+        emitPlain ("call " ++ toString label) dsts srcs Zero
+        emitMove "mov %r, %r" [r1] [rv] $ Two (Dst 0) (Src 0)
 
     (MemExpr (BinOpExpr Plus (ConstExpr x) e1'), ConstExpr y) -> do
       r1 <- codeExpr e1'
@@ -449,12 +433,12 @@ move stmt e1 e2 = do
     (MemExpr e1', ConstExpr y) -> do
       r1 <- codeExpr e1'
       emitMove ("mov qword [%r], " ++ show y) [] [r1] $ One (Src 0)
-      
+
     (MemExpr e1', e2') -> do
       r1 <- codeExpr e1'
       r2 <- codeExpr e2'
       emitMove "mov [%r], %r" [] [r1, r2] $ Two (Src 0) (Src 1)
-    
+
     (e1', ConstExpr y) -> do
       r1 <- codeExpr e1'
       emitMove ("mov %r, " ++ show y) [r1] [] $ One (Dst 0)
@@ -468,8 +452,8 @@ exprStmt :: SelectionContext m => Expr -> m ()
 exprStmt e = do
   case e of
     CallExpr (NameExpr label) args -> do
-      (rdst, rsrc) <- codeArgs args
-      emitPlain ("call " ++ Char8.unpack (_lbString label)) (rv : rdst) rsrc Zero
+      withArgs True args $ \dsts srcs -> do
+        emitPlain ("call " ++ toString label) dsts srcs Zero
     ConstExpr _ -> return ()
     e' -> do
       void $ codeExpr e'
@@ -497,39 +481,44 @@ codeStmt stmt = local (const $ Just stmt) $ do
     MoveStmt e1 e2 -> move stmt e1 e2
     ExprStmt e -> exprStmt e
     _ -> unexpectedStmt stmt
-    
-codeArgs :: SelectionContext m => [Expr] -> m ([Temp], [Temp])
-codeArgs args = do
-  mapM_ code (reverse $ zip [0..] args)
-  return ([rbp, rsp], [rbp, rsp])
-  where
-    code :: SelectionContext m => (Int, Expr) -> m ()
-    code (i, expr)
-      | i == 0 = toReg r10
-      | i == 1 = toReg rdi
-      | i == 2 = toReg rsi
-      | i == 3 = toReg rdx
-      | i == 4 = toReg rcx
-      | i == 5 = toReg r8
-      | i == 6 = toReg r9    
-      | otherwise = do
-          case expr of
-            ConstExpr x -> do
-              emitPlain ("push " <~ x) [rsp] [rsp] Zero
-            NameExpr label -> do
-              emitPlain ("push " ++ show (_lbString label)) [rsp] [] Zero
-            _ -> do
-              r <- codeExpr expr              
-              emitPlain "push %r" [] [r] $ One (Src 0)              
-      where 
-        toReg dst = void $ codeStmt $ MoveStmt (TempExpr dst) expr
 
-paramRegisters :: [Temp]
-paramRegisters =
-  [ rdi
-  , rsi
-  , rdx
-  , rcx
-  , r8
-  , r9
-  ]
+withArgs :: SelectionContext m => Bool -> [Expr] -> ([Temp] -> [Temp] -> m ()) -> m ()
+withArgs isProc args routine = do
+  -- mapM_ save [rax, rcx, rdx, r11]
+  
+  let (inRegs, inStacks) = splitAt (length paramRegisters) args
+
+  -- Pass arguments through register,
+  forM_ (zip paramRegisters inRegs) $ \(temp, expr) -> do
+    codeStmt $ MoveStmt (TempExpr temp) expr     
+
+  -- Pass arguments through the stack.
+  forM_ (reverse inStacks) $ \case
+    ConstExpr x -> do
+      emitPlain ("push " <~ x) [rsp] [rsp] Zero
+    NameExpr label -> do
+      emitPlain ("push " ++ toString label) [rsp] [rsp] Zero
+    expr -> do
+      temp <- codeExpr expr              
+      emitPlain "push %r" [rsp] [rsp, temp] $ One (Src 1)                       
+
+  emitPlain "xor %r, %r" [rax] [rax] $ Two (Dst 0) (Src 0)
+
+  -- Execute the subroutine.
+  let dsts = [ rax, rcx, rdx, r11 ] <> paramRegisters
+      srcs = zipWith const paramRegisters inRegs
+ 
+  routine dsts (rax : srcs)
+
+  -- Restore the stack.
+  let delta = length inStacks * 8
+  when (delta > 0) $ do
+    emitPlain ("add %r, "<~ delta) [rsp] [rsp] $ One (Dst 0)
+
+  -- mapM_ restore [r11, rdx, rcx, rax]
+
+  where
+    paramRegisters = [ r10, rdi, rsi, rdx, rcx, r8, r9 ]
+     
+    save r = emitPlain "push %r" [rsp] [rsp, r] $ One (Src 1)
+    restore r = emitPlain "pop %r" [rsp, r] [rsp] $ One (Dst 1)

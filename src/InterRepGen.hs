@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}           
+{-# LANGUAGE OverloadedStrings #-}            
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -19,6 +19,8 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (isNothing)
 import Control.Arrow
 import Control.Monad ((>=>))
+
+import Debug.Pretty.Simple
 
 import Ast
 import AstHelper
@@ -49,8 +51,9 @@ transProgram (Program decs) = do
 glanceDec :: Dec -> Trans ()
 glanceDec dec = do
   case dec of
-    TypeDec tid body -> do
-      zoom trsSymbolTable $ registerType tid $ makeTypeSym body
+    TypeDec tid@(TypeId name) body -> do
+      info <- zoom trsLabelPool $ allocLabelWithTag name
+      zoom trsSymbolTable $ registerType tid $ makeTypeSym body info
     VarDec (vid, tid) _ -> do
       access <- zoom trsFrame allocLocal
       depth <- use $ trsFrame . frDepth
@@ -252,10 +255,24 @@ transExpr expr = do
       fp <- zoom trsFrame framePointer        
       size <- findElemType tid >>= sizeOf
       return (tid, Ex $ TH.callPrimitive "alloc" [fp, TH.constant (size * cnt)])
-    RecordExpr tid _ -> do
-      fp <- zoom trsFrame framePointer        
-      size <- sizeOf tid
-      return (tid, Ex $ TH.callPrimitive "alloc" [fp, TH.constant size])
+    RecordExpr tid bindings -> do
+      fp <- zoom trsFrame framePointer
+      sym <- zoom trsSymbolTable (findType tid) `awareOf ` UnknownType tid
+      let fieldNum = case _tsBody sym of
+            RecordBody fields _ -> length fields
+            _ -> error $ "error in transExpr(RecordExpr): unexpected type body: " <> show (_tsBody sym)
+      when (fieldNum /= length bindings) $ do
+        throwError $ FieldInitializationNumError tid bindings
+      temp <- zoom trsTempPool allocTemp
+      
+      let allocExpr = TH.move (TH.temp temp) $ TH.callPrimitive "allocObject" [fp, TH.name (_tsInfo sym)]
+      initExprs <- forM bindings $ \(ValueBinding vid value) -> do
+        (ftid, fexpr) <- fieldOf (TH.temp temp) tid vid
+        (itid, iunion) <- transExpr value
+        matchType ftid itid
+        iexpr <- unEx iunion
+        return $ TH.move fexpr iexpr
+      return (tid, Ex $ TH.eseq (toSeqStmt $ allocExpr : initExprs) $ TH.temp temp)
     CallExpr fid args -> do
       funSym <- zoom trsSymbolTable (findFun fid) `awareOf` UnknownFun fid
       fp <- zoom trsFrame framePointer
@@ -372,7 +389,7 @@ transExpr expr = do
           throwError $ LetExprMustReturnValue expr 
         bexpr <- unEx bunion
         return (btid, Ex $ TH.eseq stmts bexpr)
-    
+        
 surround :: (Label -> Label -> Trans a) -> Trans a
 surround action = do
   labels <- zoom trsLabelPool $ replicateM 2 allocLabel
@@ -384,6 +401,8 @@ surround action = do
 matchFunArgs :: VarId -> [TypeId] -> Trans TypeId
 matchFunArgs fid ats = do
   funSym <- zoom trsSymbolTable (findFun fid) `awareOf` UnknownFun fid
+  when (length (_fsFormals funSym) /= length (ats)) $ do
+    throwError $ FunArgsNumError fid (_fsFormals funSym) ats  
   sequence_ $ zipWith matchType (fmap snd $ _fsFormals funSym) ats
   return $ _fsResult funSym
     
@@ -398,9 +417,12 @@ transVar var = do
       return (_vsType, toExpr access fp)
     FieldVar owner vid -> do
       (otid, oexpr) <- transVar owner
-      offset <- calcFieldOffset otid vid
-      tid <- findFieldType otid vid
-      return (tid, TH.mem $ TH.plus (TH.constant offset) oexpr)
+      -- offset <- calcFieldOffset otid vid
+      -- tid <- findFieldType otid vid
+      -- ws <- use $ trsFrame . frWordSize
+      -- return (tid, TH.mem $ TH.plus (TH.constant offset) (TH.mem $ TH.plus oexpr (TH.constant $ ws * 2)))
+      -- return (tid, fieldOf oexpr otid vid)
+      fieldOf oexpr otid vid
     SubscriptVar array index -> do
       (aid, aexpr) <- transVar array
       etid <- findElemType aid
@@ -418,6 +440,13 @@ sizeOf tid = do
     RecordBody fields _ -> do
       fmap sum $ mapM sizeOf $ snd $ unzip fields
     _ -> return 1
+
+fieldOf :: Tree.Expr -> TypeId -> VarId -> Trans (TypeId, Tree.Expr)
+fieldOf owner tid vid = do
+  ws <- use $ trsFrame . frWordSize
+  offset <- calcFieldOffset tid vid
+  ty <- findFieldType tid vid
+  return (ty, TH.mem $ TH.plus (TH.constant offset) (TH.mem $ TH.plus owner (TH.constant $ ws * 2)))
 
 findFieldType :: TypeId -> VarId -> Trans TypeId
 findFieldType tid attr = do
@@ -438,7 +467,8 @@ calcFieldOffset tid attr = do
         Nothing -> noSuchField tid attr
         _ -> do
           let ts = snd $ unzip $ takeWhile (\(vid, _) -> vid /= attr) fields
-          sum <$> mapM sizeOf ts
+          ws <- use $ trsFrame . frWordSize 
+          return $ length ts * ws
     _ -> notRecordType tid
   
 findElemType :: TypeId -> Trans TypeId

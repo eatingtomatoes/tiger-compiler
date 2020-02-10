@@ -9,7 +9,6 @@ import qualified Data.ByteString.Lazy.Builder as Builder
 import qualified Data.List as List 
 
 import Label
-import Fragment
 
 
 class ToBuilder a where

@@ -42,3 +42,5 @@ allocLabelWithTag tag = do
 labelFrom :: Char8.ByteString -> Label
 labelFrom str = Label str
 
+toString :: Label -> String
+toString = Char8.unpack . _lbString

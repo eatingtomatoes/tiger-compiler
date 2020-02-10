@@ -16,10 +16,11 @@ fn mark(ptr: Pointer): Void
 
 type Pair = { x: Int, y: Int}
 
+type Human = { a: Pair }
 
 global fn main(): Int := let
-  var p: Pair := Pair { x=1, y=2 }
+  var h: Human := Human { a = Pair { x=8, y=9 }}
 in
-  printf("(%d) ", p.x);
+  printf("%d %d", h.a.x, h.a.y);
   0
 end

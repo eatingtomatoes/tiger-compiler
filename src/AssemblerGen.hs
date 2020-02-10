@@ -25,7 +25,7 @@ import InstructionSelection
 import RegisterAllocation
 import Util
 import Frame
-
+  
 data ASMError
   = NoMapForTemp Instruction Temp
   | IndexError Instruction IndexError
@@ -53,6 +53,19 @@ dataHeader = toBuilder "[section .data]"
 genFuntion :: Label -> Builder -> Builder
 genFuntion name body = joinLines $ [ toBuilder name <> toBuilder ":", body ]
 
+encodeType :: (Label, [Maybe Label]) -> Builder
+encodeType (label, fields) = joinLines $ header : fields'
+  where
+    header = joinLines
+      [ toBuilder label <> toBuilder ":"
+      , toBuilder "dq 0x1234321"
+      , toBuilder $ "dq " <> show (length fields)
+      ]
+    fields' = fmap f fields
+      where
+        f (Just (Label str)) = toBuilder "dq " <> toBuilder str
+        f _ = toBuilder "dq 0"
+
 encodeStrFrag :: StrFrag -> Builder
 encodeStrFrag StrFrag{..}
   = label <> toBuilder ": db '" <> content <> toBuilder "', 0x0"
@@ -61,17 +74,21 @@ encodeStrFrag StrFrag{..}
     content = toBuilder _sfContent
  
 encodeProcFrag :: ProcFrag -> ExceptT String (State (TempPool, LabelPool)) Builder
-encodeProcFrag frag@ProcFrag{..} = do
-  -- entire <- removeRedundantJump <$> selectInstructions frag
-  entire <- selectInstructions frag
-  case allocRegisters entire machineRegisters of
-    Left temp -> encodeProcFrag $ spill temp frag
-    Right dist -> do
-      insts <- unify $ do
-        mapM (encodeInstruction $ buildTempMapper dist)
-          $ removeLonelyLabel
-          $ removeRedundantJump entire
-      return $ genFuntion (_frName _pfFrame) $ joinLines $ catMaybes insts
+encodeProcFrag = calc retryLimit
+  where
+    retryLimit = 3 :: Int
+    calc 0 _=  error "Failed to allocate registers"
+    calc retry frag@ProcFrag{..} = do
+      entire <- selectInstructions frag
+      case allocRegisters entire of
+        -- Left temp -> calc (pred retry) $ pTrace ("spill " <> show temp <> " out") $ spill temp frag
+        Left temp -> error $ show temp <> " needs spilling"
+        Right dist -> do
+          insts <- unify $ do
+            mapM (encodeInstruction $ buildTempMapper dist)
+              $ removeLonelyLabel
+              $ removeRedundantJump entire
+          return $ genFuntion (_frName _pfFrame) $ joinLines $ catMaybes insts
 
 removeLonelyLabel :: [Instruction] -> [Instruction]
 removeLonelyLabel insts = filter p insts 
@@ -90,12 +107,16 @@ encodeInstruction :: TempMapper -> Instruction -> Either ASMError (Maybe Builder
 encodeInstruction mapper inst = first ($ inst) $ do
   let mapAll = sequence . fmap mapper 
   case inst of
-    Oper s fmt dsts srcs keys -> do
+    Oper _ fmt@("mov %r, %r") dsts srcs keys -> do
       dsts' <- mapAll dsts
       srcs' <- mapAll srcs
-      if s && dsts' == srcs'
+      if dsts' == srcs'
         then return Nothing
         else bimap (flip IndexError) (Just . toBuilder) $ format fmt dsts' srcs' keys
+    Oper _ fmt dsts srcs keys -> do
+      dsts' <- mapAll dsts
+      srcs' <- mapAll srcs
+      bimap (flip IndexError) (Just . toBuilder) $ format fmt dsts' srcs' keys        
     Lab label -> do
       return $ Just $ toBuilder label <> toBuilder ":"
     Jmp op dst -> do

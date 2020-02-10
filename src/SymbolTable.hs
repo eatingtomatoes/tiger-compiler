@@ -28,6 +28,7 @@ data SymbolTable
 data TypeSym
   = TypeSym
   { _tsBody :: TypeBody
+  , _tsInfo :: Label
   } deriving (Show)
 
 data VarSym
@@ -106,9 +107,10 @@ findVar = findSym stVars
 findFun :: MonadState SymbolTable m => VarId -> m (Maybe FunSym)
 findFun = findSym stFuns
 
-makeTypeSym :: TypeBody -> TypeSym
-makeTypeSym body = TypeSym
+makeTypeSym :: TypeBody -> Label -> TypeSym
+makeTypeSym body info = TypeSym
   { _tsBody = body
+  , _tsInfo = info
   }
 
 makeVarSymHead :: TypeId -> Int -> VarSym
@@ -139,3 +141,13 @@ nextSymbolTable :: SymbolTable -> SymbolTable
 nextSymbolTable parent@SymbolTable{..} = def
   { _stParent = Just parent
   }
+
+describeTypes :: Map.Map TypeId TypeSym -> [(Label, [Maybe Label])]
+describeTypes types = foldr f mempty $ Map.elems types
+  where
+    f (TypeSym (RecordBody fields _) info) table = (info, desc) : table
+      where
+        desc = fmap (maybe Nothing g . flip Map.lookup types . snd) fields
+          where
+            g sym = if isRecord (_tsBody sym) then Just (_tsInfo sym) else Nothing
+    f _ table= table

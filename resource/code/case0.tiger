@@ -1,0 +1,16 @@
+type Int is primitive
+
+type Any is primitive
+
+type Void is primitive
+
+type Str is primitive
+
+fn printf(fmt: Str, x: Int): Void
+
+global fn main(): Int := let
+in
+  printf("(%d)", 6);
+  0
+end
+

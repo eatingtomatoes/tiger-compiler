@@ -23,6 +23,7 @@ global fn main(): Int := let
     printf("%d ", m.x);
     0
   )
+
 in
    printBoard(1, 2)
 end  

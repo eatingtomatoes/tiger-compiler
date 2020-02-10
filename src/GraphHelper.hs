@@ -1,20 +1,18 @@
 module GraphHelper where
 
-import Control.Monad
-import Control.Monad.Writer
-import Control.Arrow
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Debug.Trace
 import Data.List (groupBy, sort)
 import Data.Tuple (swap)
-
 
 import Graph
 
 toGraphviz :: (Show a, Ord a) => String -> Graph a -> String
 toGraphviz title graph = "graph " <> title <> "{\n" <> nodes <> edges <> "}\n"
+-- toGraphviz title graph = "graph " <> title <> "{\n" <> edges <> "}\n"
   where
-    connections = [ (x, n) | (x, ns) <- Map.toList graph, n <- Set.toList ns, x <= n ]
+    connections = [ (x, n) | (x, ns) <- Map.toList graph, n <- Set.toList ns, x < n ]
     edges = concatMap f connections
       where
         f (x, n) = show x <> " -- " <> show n <> ";\n"
@@ -28,6 +26,5 @@ toGraphviz title graph = "graph " <> title <> "{\n" <> nodes <> edges <> "}\n"
         f x y = fst x == fst y
         g xs = (fst $ head xs, length xs)
 
-dumpGraph :: (Show a, Ord a) => String -> Graph a -> IO ()
-dumpGraph title graph = do
-  writeFile (title <> ".dot") $ toGraphviz title graph
+traceGraph :: (Show a, Ord a) => String -> Graph a -> Graph a
+traceGraph title graph = trace (toGraphviz title graph) graph

@@ -10,6 +10,10 @@ module Ast
   , VarId (..)
   , BinOp (..)
   , UnOp (..)
+  , isAlias
+  , isRecord
+  , isArray
+  , isPrimitive
   , isFunDec
   , isVarDec
   ) where
@@ -32,6 +36,7 @@ data TypeBody
   | ArrayBody TypeId
   | Hidden
   deriving (Show, Eq)
+
 
 type TypeBinding = (VarId, TypeId)
 
@@ -91,6 +96,22 @@ data UnOp
   = Negate
   | Not
   deriving (Show, Eq)
+
+isAlias :: TypeBody -> Bool
+isAlias (Alias _) = True
+isAlias _ = False
+
+isRecord :: TypeBody -> Bool
+isRecord (RecordBody _ _) = True
+isRecord _ = False
+
+isArray :: TypeBody -> Bool
+isArray (ArrayBody _) = True
+isArray _ = False
+
+isPrimitive :: TypeBody -> Bool
+isPrimitive Hidden = True
+isPrimitive _ = False
 
 isFunDec :: Dec -> Bool
 isFunDec (FunDec _ _ _ _ _) = True

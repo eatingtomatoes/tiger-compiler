@@ -16,6 +16,10 @@ data Register
   | R9
   | R10
   | R11
+  | R12
+  | R13
+  | R14
+  | R15
   deriving (Show, Eq, Ord)
 
 stringify :: Register -> String
@@ -28,19 +32,3 @@ instance PrintfArg Register where
       , fmtPrecision = Nothing
       }
     | otherwise = errorBadFormat $ fmtChar fmt
-
-machineRegisters :: [Register]
-machineRegisters =
-  [ RAX
-  , RBX
-  , RCX
-  , RDX
-  , RDI  
-  , RSI
-  , RBP
-  , RSP
-  , R8
-  , R9
-  , R10
-  , R11
-  ]

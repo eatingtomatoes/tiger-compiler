@@ -11,6 +11,7 @@ module Graph
   , nodesOf
   , isNeighborOf
   , isNeighbors
+  , mergeTo
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -57,4 +58,11 @@ isNeighborOf x y g = maybe False (Set.member x) $ neighborsOf y g
 
 isNeighbors :: Ord a => a -> a -> Graph a -> Bool
 isNeighbors x y g = isNeighborOf x y g || isNeighborOf y x g
-      
+
+-- Add edges between x's neighbors and y then delete x
+mergeTo :: Ord a => a -> a -> Graph a -> Graph a
+mergeTo x y g = deleteNode x . foldr f g $ maybe mempty id $ neighborsOf x g 
+  where
+    f a = connect a y . disconnect a x 
+
+                    

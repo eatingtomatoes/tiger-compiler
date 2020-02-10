@@ -34,6 +34,14 @@ data TempPool
 makeLenses ''Temp
 makeLenses ''TempPool
 
+isTemp :: Temp -> Bool
+isTemp (Temp _) = True
+isTemp _ = False
+
+isReg :: Temp -> Bool
+isReg (Reg _) = True
+isReg _ = False
+
 allocTemp :: MonadState TempPool m => m Temp
 allocTemp = do
   modifying tplCount (+1)
