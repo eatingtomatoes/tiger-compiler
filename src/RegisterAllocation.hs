@@ -21,7 +21,8 @@ import Debug.Trace
 import Data.List (sort)
 
 import Temp
-import Instruction
+-- import Instruction
+import PseudoInst
 import Register
 import InterferenceGraph
 import Graph
@@ -30,14 +31,14 @@ import GraphHelper
 import Util
 
 type RegisterDist = Map.Map Temp Register
-
-allocRegisters :: [Instruction] -> Either Temp RegisterDist 
-allocRegisters insts = case simplify (length machineRegisters) $ traceGraph "simplified" itfg of
-  Left rest -> Left $ peek $ traceGraph "rest" rest
-  Right stack -> return $ flip (foldr addLost) table $ foldl f mempty $ pTraceShowId stack
+ 
+allocRegisters :: [PseudoInst Temp] -> Either Temp RegisterDist 
+allocRegisters insts = case simplify (length machineRegisters) itfg of
+  Left rest -> Left $ peek rest
+  Right stack -> return $ flip (foldr addLost) table $ foldl f mempty stack
   where
-    (table, itfg) = coalesceTemp (length machineRegisters) insts $ buildInterferenceGraph $ pTraceShowId insts 
-    peek graph = fst $ maximumBy (comparing snd) $ filter (isTemp . fst) $ Map.toList $ Map.map Set.size graph
+    (table, itfg) = coalesceTemp (length machineRegisters) insts $ buildInterferenceGraph insts 
+    peek  = fst . maximumBy (comparing $ length . filter isTemp . toList . snd) . filter (isTemp . fst) . Map.toList 
 
     f :: RegisterDist -> Temp -> RegisterDist
     f dist t = case find (match t) $ machineRegisters \\ occupied of
@@ -68,10 +69,10 @@ machineRegisters =
   , R9
   , R10
   , R11
-  , R12
-  , R13
-  , R14
-  , R15
+  -- , R12
+  -- , R13
+  -- , R14
+  -- , R15
   ]
 
 match :: Temp -> Register -> Bool

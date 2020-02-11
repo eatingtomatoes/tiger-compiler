@@ -19,8 +19,8 @@ type Pair = { x: Int, y: Int}
 type Human = { a: Pair }
 
 global fn main(): Int := let
-  var h: Human := Human { a = Pair { x=8, y=9 }}
+  var h: Human := Human { a = Pair { x=123, y=456 } }
 in
-  printf("%d %d", h.a.x, h.a.y);
-  0
+  printf(" (%d %d) ", h.a.x + 3 * 6, h.a.y);
+  0 
 end

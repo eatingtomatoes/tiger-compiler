@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module InterferenceGraph
   ( InterferenceGraph
@@ -7,7 +8,6 @@ module InterferenceGraph
   ) where
 
 import qualified Data.Set as Set
-import Control.Arrow
 import qualified Data.Map.Strict as Map
 import Control.Monad.Writer
 import Data.Maybe (catMaybes)
@@ -15,19 +15,17 @@ import Data.Bifunctor (bimap)
 import qualified Data.DList as DList
 import Debug.Pretty.Simple
 
-import Util
-
 import Graph
 import Temp
-import Instruction
+import PseudoInst
 import Liveness
 
 type InterferenceGraph = Graph Temp
 
-buildInterferenceGraph :: [Instruction] -> InterferenceGraph
+buildInterferenceGraph :: [PseudoInst Temp] -> InterferenceGraph
 buildInterferenceGraph insts = uncurry (buildInterferenceGraph_ insts) $ calcInsOuts insts
 
-buildInterferenceGraph_ :: [Instruction] -> [Set.Set Temp] -> [Set.Set Temp] -> InterferenceGraph
+buildInterferenceGraph_ :: [PseudoInst Temp] -> [Set.Set Temp] -> [Set.Set Temp] -> InterferenceGraph
 buildInterferenceGraph_ insts ins outs = addExtra $ foldr connectGroup mempty ins
   where
     addExtra g = foldr f g (zip insts outs) 
@@ -35,17 +33,19 @@ buildInterferenceGraph_ insts ins outs = addExtra $ foldr connectGroup mempty in
         f (inst, out) g' = foldr (uncurry connect) g' $ Set.cartesianProduct dsts neighbors 
           where
             neighbors = (if isMove inst then flip Set.difference srcs else id) out
-            (dsts, srcs) = (defs &&& uses) inst
+            (dsts, srcs) = defsAndUses inst
 
-coalesceTemp :: Int -> [Instruction] -> InterferenceGraph -> ([(Temp, Temp)], InterferenceGraph)
+coalesceTemp :: Int -> [PseudoInst Temp] -> InterferenceGraph -> ([(Temp, Temp)], InterferenceGraph)
 coalesceTemp usableRegisters insts graph = (Map.toList $ foldr f mempty replacements, coalesced)
   where
     (coalesced, replacements) = runWriter $ calc moveRelatedPairs graph
     f (x, y) table = Map.insert x (maybe y id $ Map.lookup y table) table      
-    
-    moveRelatedPairs = catMaybes $ flip fmap insts $ \case
-      Oper True "mov %r, %r" [dst] [src] _ -> Just (dst, src)
-      _ -> Nothing
+
+    moveRelatedPairs = catMaybes $ fmap f' insts
+      where
+        f' PseudoInst{..} = case (_piOperator, _piAddrPattern) of
+          (Mov, RR dst src) -> Just (dst, src)
+          _ -> Nothing
 
     calc :: [(Temp, Temp)] -> InterferenceGraph -> Writer (DList.DList (Temp{-Removed-}, Temp)) InterferenceGraph
     calc [] g = return g
@@ -59,7 +59,7 @@ coalesceTemp usableRegisters insts graph = (Map.toList $ foldr f mempty replacem
       | otherwise = calc rest g
       where
         replace :: Temp -> Temp -> ([(Temp, Temp)], InterferenceGraph)
-        replace a b = pTrace ("replace " <> show a <> "-->" <> show b) (pairs, mergeTo a b g) 
+        replace a b = {-pTrace ("replace " <> show a <> "-->" <> show b)-} (pairs, mergeTo a b g) 
           where
             rep c = if c == a then b else c
             pairs = filter (\p -> fst p /= snd p) $ fmap (bimap rep rep) rest

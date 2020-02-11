@@ -59,7 +59,7 @@ edit :
 	emacs -nw $(TARGTE).asm
 
 view : 
-	make run 2>&1 | ./scripts/view_diagram.sh
+	make dump 2>&1 | ./scripts/view_diagram.sh
 
 gdb :
 	gdb $(TARGTE) core

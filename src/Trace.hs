@@ -16,7 +16,6 @@ import Data.Maybe (catMaybes)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Map as Map
-import Data.Bifunctor (first)
 
 import Tree
 import Label

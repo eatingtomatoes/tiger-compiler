@@ -11,17 +11,17 @@ import Control.Arrow
 import Data.Maybe (catMaybes)
 
 import Temp
-import Instruction
+import PseudoInst
 import ControlFlowGraph
 import Data.Functor ((<&>))
 
 import Util
 
-calcInsOuts :: [Instruction] -> ([Set.Set Temp], [Set.Set Temp])
+calcInsOuts :: [PseudoInst Temp] -> ([Set.Set Temp], [Set.Set Temp])
 calcInsOuts insts = uncurry (calcInsOuts_ $ buildControlFlowGraph insts) $ calcDefsUses insts
 
-calcDefsUses :: [Instruction] -> ([Set.Set Temp], [Set.Set Temp])
-calcDefsUses = unzip . fmap (defs &&& uses)
+calcDefsUses :: [PseudoInst Temp] -> ([Set.Set Temp], [Set.Set Temp])
+calcDefsUses = unzip . fmap defsAndUses 
 
 calcInsOuts_ :: ControlFlowGraph -> [Set.Set Temp] -> [Set.Set Temp] -> ([Set.Set Temp], [Set.Set Temp])
 calcInsOuts_ graph idefs iuses = fixpoint (==) calc $ id &&& id $ mempty <$ idefs
