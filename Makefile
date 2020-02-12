@@ -24,7 +24,7 @@ all : $(TARGTE)
 
 run : $(TARGTE)
 	rm -f core
-	$<
+	$< 
 
 $(TARGTE) : $(TARGTE).o $(GC).o
 	$(CXX) $(CXXFLAGS) $^ -o $@
@@ -35,8 +35,8 @@ $(TEST_GC) : $(TEST_GC).o $(GC).o
 $(TARGTE).o : $(TARGTE).asm
 	$(AS) $(ASFLAGS) $^ -o $@
 
-$(TARGTE).asm : $(TIGER) tiger.cabal $(wildcard src/*.hs) 
-	stack run -- -i $< -o $@
+$(TARGTE).asm : $(TIGER) tiger.cabal $(wildcard src/*.hs app/*.hs) 
+	stack run -- -i $< -o $@ $(OPTS)
 
 $(GC).o : $(CPP_SOURCE_DIR)/gc.cpp $(CPP_SOURCE_DIR)/gc.hpp 
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -53,7 +53,7 @@ cat :
 	-@echo
 
 dump : 
-	stack run -- -i $(TIGER) | cat -n
+	stack run -- -i $(TIGER) $(OPTS) | cat -n  
 
 edit :
 	emacs -nw $(TARGTE).asm

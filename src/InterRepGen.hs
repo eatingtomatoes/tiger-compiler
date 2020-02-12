@@ -10,14 +10,15 @@
  
 module InterRepGen
   ( genInterRep
+  , genInterRep'
   ) where
-
+ 
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Lens hiding (index, lens, op)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (isNothing)
-import Control.Arrow
+import Data.Bifunctor
 import Control.Monad ((>=>))
 
 import Debug.Pretty.Simple
@@ -37,6 +38,9 @@ import SymbolTable
 import Util
  
 type Trans = ExceptT TransError (State TransState)
+
+genInterRep' :: TransState -> Program -> Either String TransState
+genInterRep' initial program = first show $ genInterRep initial program
 
 genInterRep :: TransState -> Program -> Either TransError TransState
 genInterRep initial program = flip evalState initial $ runExceptT $ transProgram program >> get

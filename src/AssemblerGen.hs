@@ -70,12 +70,11 @@ encodeStrFrag StrFrag{..}
   = label <> toBuilder ": db " <> content <> toBuilder ", 0x0"
   where
     label = toBuilder _sfLabel
-    -- content = toBuilder _sfContent
     content = mconcat $ intersperse comma $ intersperse linebreak $ fmap (toBuilder . show) $ splitOn "\\n" $ Char8.unpack  _sfContent
       where
         linebreak = toBuilder "0xa"
         comma = toBuilder ", "
- 
+
 encodeProcFrag :: ProcFrag -> ExceptT String (State (TempPool, LabelPool)) Builder
 encodeProcFrag frag@ProcFrag{..} = do
   insts <- selectInstructions frag

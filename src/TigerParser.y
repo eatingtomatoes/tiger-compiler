@@ -198,9 +198,9 @@ VarId :: { VarId }
   ; 
 
 {
-data ParserError = ParserError String
-  deriving (Show)
+--data ParserError = ParserError String
+--  deriving (Show)
 
-parseTiger :: Char8.ByteString -> Either ParserError Program
-parseTiger input = mapLeft ParserError $ TigerLexer.runTigerLexer input parser
+parseTiger :: Char8.ByteString -> Either String Program
+parseTiger input = TigerLexer.runTigerLexer input parser
 }

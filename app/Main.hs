@@ -6,46 +6,53 @@
 module Main where
 
 import qualified Data.ByteString.Lazy.Char8 as Char8
-
 import Control.Monad.Except
 import System.Exit
 
-import Compiler
+import Control.Monad.State
+import Data.Default
+import Data.Foldable
+import Text.Pretty.Simple
 
-import Options.Applicative
+import TigerParser
+import SymbolTable
+import TransState
+import InterRepGen
+import AssemblerGen
 
-data CompilerOpts
-  = CompilerOpts
-  { _inPath :: Maybe String
-  , _outPath :: Maybe String
-  } deriving (Show)
+import CompilerOpts
       
 main :: IO ()
 main = do
   CompilerOpts{..} <- getCompilerOpts
   source <- maybe Char8.getContents Char8.readFile _inPath
-  case runExcept $ compile source of
-    Left err -> do
-      putStrLn err
-      exitFailure
-    Right asm -> do
-      maybe Char8.putStrLn Char8.writeFile _outPath asm
-    
-getCompilerOpts :: IO CompilerOpts
-getCompilerOpts = execParser $ info (opts <**> helper) idm
+
+  ast <- access $ parseTiger source
+
+  when _dumpAst $ do
+    pPrint ast  
+  
+  TransState{..} <- access $ genInterRep' def ast  
+
+  funs <- access $ runExcept $ do
+    mapExceptT (flip evalStateT (_trsTempPool, _trsLabelPool)) $ do
+      -- mapM encodeProcFrag $ toList _trsProcFragSet
+      forM (toList _trsProcFragSet) $ \frag -> do
+        -- insts <- selectInstructions frag
+        encodeProcFrag frag
+
+  let strs = fmap encodeStrFrag $ toList _trsStrFragSet
+      types = fmap encodeType $ describeTypes $ _stTypes _trsSymbolTable             
+      dataSection = genDataSection $ types <> strs
+      textSection = genTextSection _trsGlobal _trsExternal funs      
+
+  let assembler = genAssemblerCode dataSection textSection  
+  
+  maybe Char8.putStrLn Char8.writeFile _outPath assembler
+
   where
-    opts = CompilerOpts
-      <$> option (maybeReader $ Just . Just)
-      ( long "input"
-        <> short 'i'
-        <> help "source filename"
-        <> value Nothing
-        <> metavar "INPUT"
-      )
-      <*> option (maybeReader $ Just . Just)
-      ( long "output"
-        <> short 'o'
-        <> help "output filename"
-        <> value Nothing
-        <> metavar "OUTPUT"
-      )
+    access :: Either String a -> IO a
+    access x = case x of
+      Left msg -> putStrLn msg >> exitFailure
+      Right v -> return v
+    
