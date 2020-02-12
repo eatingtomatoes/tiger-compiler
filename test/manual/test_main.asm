@@ -8,7 +8,7 @@ dq 0x1234321
 dq 2
 dq 0
 dq 0
-label_8: db ' (%d %d) ', 0x0
+label_8: db "%d", 0xa, "%d", 0xa, "", 0x0
 [section .text]
 global main
 extern mark

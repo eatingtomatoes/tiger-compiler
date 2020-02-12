@@ -23,6 +23,9 @@ instance ToBuilder String where
 instance ToBuilder Label where
   toBuilder = toBuilder . _lbString 
 
+instance ToBuilder Int where
+  toBuilder = toBuilder . show
+
 joinLines :: [Builder.Builder] -> Builder.Builder
 joinLines = mconcat . List.intersperse linebreak 
   where

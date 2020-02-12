@@ -13,6 +13,8 @@ import Control.Monad.State
 import Control.Monad.Except
 import Debug.Pretty.Simple
 import Data.Maybe (catMaybes)
+import Data.List.Split
+import Data.List (intersperse)
 import qualified Data.Set as Set
 import Control.Lens (zoom, _1)
 
@@ -65,28 +67,15 @@ encodeType (label, fields) = joinLines $ header : fields'
 
 encodeStrFrag :: StrFrag -> Builder
 encodeStrFrag StrFrag{..}
-  = label <> toBuilder ": db '" <> content <> toBuilder "', 0x0"
+  = label <> toBuilder ": db " <> content <> toBuilder ", 0x0"
   where
     label = toBuilder _sfLabel
-    content = toBuilder _sfContent
+    -- content = toBuilder _sfContent
+    content = mconcat $ intersperse comma $ intersperse linebreak $ fmap (toBuilder . show) $ splitOn "\\n" $ Char8.unpack  _sfContent
+      where
+        linebreak = toBuilder "0xa"
+        comma = toBuilder ", "
  
--- encodeProcFrag :: ProcFrag -> ExceptT String (State (TempPool, LabelPool)) Builder
--- encodeProcFrag = calc retryLimit
---   where
---     retryLimit = 3 :: Int
---     calc 0 _=  error "Failed to allocate registers"
---     calc retry frag@ProcFrag{..} = do
---       entire <- selectInstructions frag
---       case allocRegisters entire of
---         -- Left temp -> calc (pred retry) $ pTrace ("spill " <> show temp <> " out") $ spill temp frag
---         Left temp -> error $ show temp <> " needs spilling"
---         Right dist -> do
---           insts <- unify $ do
---             mapM (encodeInstruction $ buildTempMapper dist)
---               $ removeLonelyLabel
---               $ removeRedundantJump entire
---           return $ genFuntion (_frName _pfFrame) $ joinLines $ catMaybes insts
-
 encodeProcFrag :: ProcFrag -> ExceptT String (State (TempPool, LabelPool)) Builder
 encodeProcFrag frag@ProcFrag{..} = do
   insts <- selectInstructions frag
@@ -108,12 +97,6 @@ encodeProcFrag frag@ProcFrag{..} = do
             $ removeLonelyLabel
             $ removeRedundantJump insts
 
-removeLonelyLabel :: [PseudoInst Temp] -> [PseudoInst Temp]
-removeLonelyLabel insts = filter p insts 
-  where
-    p = maybe True (flip Set.member bucket) . labelOf
-    bucket = Set.fromList $ catMaybes $ fmap branchDstOf insts
-
 encodeInstruction :: RegisterDist -> PseudoInst Temp -> PseudoInst Register
 encodeInstruction dist pit = fmap f pit
   where
@@ -127,28 +110,9 @@ removeRedundantMove insts = filter (not . p) insts
     p PseudoInst{..} = case (_piOperator, _piAddrPattern) of
       (Mov, RR x y) | x == y -> True
       _ -> False
--- type TempMapper = Temp -> Either (PseudoInst Temp -> ASMError) Register
 
--- buildTempMapper :: RegisterDist -> TempMapper
--- buildTempMapper dist t = maybe (Left $ flip NoMapForTemp t) Right $ Map.lookup t dist
-
--- encodeInstruction :: TempMapper -> PseudoInst Temp -> Either ASMError (Maybe Builder)
--- encodeInstruction mapper inst = first ($ inst) $ do
---   let mapAll = sequence . fmap mapper 
---   case inst of
---     Oper _ fmt@("mov %r, %r") dsts srcs keys -> do
---       dsts' <- mapAll dsts
---       srcs' <- mapAll srcs
---       if dsts' == srcs'
---         then return Nothing
---         else bimap (flip IndexError) (Just . toBuilder) $ format fmt dsts' srcs' keys
---     Oper _ fmt dsts srcs keys -> do
---       dsts' <- mapAll dsts
---       srcs' <- mapAll srcs
---       bimap (flip IndexError) (Just . toBuilder) $ format fmt dsts' srcs' keys        
---     Lab label -> do
---       return $ Just $ toBuilder label <> toBuilder ":"
---     Jmp op dst -> do
---       return $ Just $ toBuilder op <> toBuilder " " <> toBuilder dst
---   where
-
+removeLonelyLabel :: [PseudoInst Temp] -> [PseudoInst Temp]
+removeLonelyLabel insts = filter p insts 
+  where
+    p = maybe True (flip Set.member bucket) . labelOf
+    bucket = Set.fromList $ catMaybes $ fmap branchDstOf insts
