@@ -10,6 +10,7 @@ import qualified Data.Set as Set
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Lens (makeLenses, _1, _2, over, zoom, use)
+import Debug.Pretty.Simple
 
 import Temp
 import TempHelper
@@ -352,7 +353,7 @@ instance Functor PseudoInst where
 type SpillContext = StateT (Maybe Int, TempPool) (Writer [PseudoInst Temp])
 
 spill :: MonadState TempPool m => Temp -> [PseudoInst Temp] -> m [PseudoInst Temp]
-spill target insts = do
+spill target insts = pTrace ("to spill `" <> show target <> "' out") $ do
   pool <- get
   let (pool', insts') = spill' pool target insts
   put pool'

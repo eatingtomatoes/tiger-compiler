@@ -19,6 +19,8 @@ import Data.Ord (comparing)
 import Debug.Pretty.Simple
 import Debug.Trace
 import Data.List (sort)
+import Control.Monad.State
+import Control.Monad.Except
 
 import Temp
 -- import Instruction
@@ -31,9 +33,19 @@ import GraphHelper
 import Util
 
 type RegisterDist = Map.Map Temp Register
- 
-allocRegisters :: [PseudoInst Temp] -> Either Temp RegisterDist 
-allocRegisters insts = case simplify (length machineRegisters) itfg of
+
+allocRegisters :: Int -> [PseudoInst Temp] -> ExceptT String (State TempPool) [PseudoInst Register]
+allocRegisters spillingLimit insts = do
+  case allocRegisters' insts of
+    Left temp -> spill temp insts >>= allocRegisters (spillingLimit - 1)
+    Right dist -> return $ fmap (fmap $ f dist) insts
+  where
+    f dist x = maybe (error msg) id (Map.lookup x dist)
+      where
+        msg = "no register assigned for '" <> show x <> "' in allocRegisters"
+
+allocRegisters' :: [PseudoInst Temp] -> Either Temp RegisterDist 
+allocRegisters' insts = case simplify (length machineRegisters) itfg of
   Left rest -> Left $ peek rest
   Right stack -> return $ flip (foldr addLost) table $ foldl f mempty stack
   where

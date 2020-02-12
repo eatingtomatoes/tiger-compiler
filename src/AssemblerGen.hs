@@ -49,8 +49,11 @@ textHeader = toBuilder "[section .text]"
 dataHeader :: Builder
 dataHeader = toBuilder "[section .data]"
 
-genFuntion :: Label -> Builder -> Builder
-genFuntion name body = joinLines $ [ toBuilder name <> toBuilder ":", body ]
+genFuntion :: Label -> [PseudoInst Register] -> Builder
+genFuntion name body
+  = joinLines
+  $ (toBuilder name <> toBuilder ":")
+  : fmap (toBuilder . show) body
 
 encodeType :: (Label, [Maybe Label]) -> Builder
 encodeType (label, fields) = joinLines $ header : fields'
@@ -75,27 +78,6 @@ encodeStrFrag StrFrag{..}
         linebreak = toBuilder "0xa"
         comma = toBuilder ", "
 
-encodeProcFrag :: ProcFrag -> ExceptT String (State (TempPool, LabelPool)) Builder
-encodeProcFrag frag@ProcFrag{..} = do
-  insts <- selectInstructions frag
-  calc limit insts
-  where
-    limit = 10 ::Int
-    calc 0 _ =  error "Failed to allocate registers" 
-    calc retry insts = do
-      case allocRegisters insts of
-        Left temp -> do
-          insts' <- zoom _1 $ pTrace (show temp <> " needs spilling out") spill temp insts
-          calc (pred retry) insts'
-        Right dist -> return
-            $ genFuntion (_frName _pfFrame)
-            $ joinLines
-            $ fmap (toBuilder . show)
-            $ removeRedundantMove
-            $ fmap (encodeInstruction dist)
-            $ removeLonelyLabel
-            $ removeRedundantJump insts
-
 encodeInstruction :: RegisterDist -> PseudoInst Temp -> PseudoInst Register
 encodeInstruction dist pit = fmap f pit
   where
@@ -110,8 +92,15 @@ removeRedundantMove insts = filter (not . p) insts
       (Mov, RR x y) | x == y -> True
       _ -> False
 
-removeLonelyLabel :: [PseudoInst Temp] -> [PseudoInst Temp]
+removeLonelyLabel :: [PseudoInst r] -> [PseudoInst r]
 removeLonelyLabel insts = filter p insts 
   where
     p = maybe True (flip Set.member bucket) . labelOf
     bucket = Set.fromList $ catMaybes $ fmap branchDstOf insts
+
+removeRedundantJump :: [PseudoInst r] -> [PseudoInst r]
+removeRedundantJump (j : l : rest) = f $ removeRedundantJump (l : rest)
+  where
+    matched = maybe False id $ (==) <$> branchDstOf j <*> labelOf l
+    f = if matched then id else (j :)
+removeRedundantJump insts = insts

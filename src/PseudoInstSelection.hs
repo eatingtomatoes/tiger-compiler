@@ -9,7 +9,6 @@
 
 module PseudoInstSelection
   ( selectInstructions
-  , removeRedundantJump
   ) where
 
 import Control.Monad.Writer
@@ -90,13 +89,6 @@ selectFunTail = execWriter $ do
 
 selectFunBody :: InstSel m => [T.Stmt] -> m [PseudoInst Temp]
 selectFunBody body = execWriterT $ runReaderT (mapM_ codeStmt body) Nothing
-
-removeRedundantJump :: [PseudoInst Temp] -> [PseudoInst Temp]
-removeRedundantJump (j : l : rest) = f $ removeRedundantJump (l : rest)
-  where
-    matched = maybe False id $ (==) <$> branchDstOf j <*> labelOf l
-    f = if matched then id else (j :)
-removeRedundantJump insts = insts
 
 unexpectedStmt :: SelectionContext m => T.Stmt -> m a
 unexpectedStmt = throwError . UnexpectedStmt

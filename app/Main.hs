@@ -13,12 +13,17 @@ import Control.Monad.State
 import Data.Default
 import Data.Foldable
 import Text.Pretty.Simple
+import Control.Lens
 
 import TigerParser
 import SymbolTable
 import TransState
 import InterRepGen
 import AssemblerGen
+import PseudoInstSelection
+import Fragment
+import Frame
+import RegisterAllocation
 
 import CompilerOpts
       
@@ -36,11 +41,15 @@ main = do
 
   funs <- access $ runExcept $ do
     mapExceptT (flip evalStateT (_trsTempPool, _trsLabelPool)) $ do
-      -- mapM encodeProcFrag $ toList _trsProcFragSet
       forM (toList _trsProcFragSet) $ \frag -> do
-        -- insts <- selectInstructions frag
-        encodeProcFrag frag
-
+        insts <- selectInstructions frag >>= zoom _1 . allocRegisters 10
+        return
+          $ genFuntion (_frName $ _pfFrame frag)
+          $ removeRedundantMove
+          $ removeLonelyLabel
+          $ removeRedundantJump
+          $ insts
+      
   let strs = fmap encodeStrFrag $ toList _trsStrFragSet
       types = fmap encodeType $ describeTypes $ _stTypes _trsSymbolTable             
       dataSection = genDataSection $ types <> strs
