@@ -1,0 +1,19 @@
+module MiddleEnd.Quadruple.Optimization
+  ( QuadrupleOptimizer
+  ) where
+
+import Control.Monad.State
+import Control.Monad.Except
+
+import Translation.Temp
+import Translation.Label
+import MiddleEnd.Quadruple
+
+type QuadrupleOptimizer m = [Quadruple] -> ExceptT String (StateT (TempPool, LabelPool) m) [Quadruple]
+
+runOptimizer :: [QuadrupleOptimizer] -> QuadrupleOptimizer
+runOptimizer optimizers quads = do
+  qs <- foldrM ($) quads optimizers
+  if qs == quads
+    then qs
+    else runOptimizer optimizers qs

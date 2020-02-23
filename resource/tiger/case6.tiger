@@ -1,0 +1,38 @@
+type Int is primitive
+
+type Any is primitive
+
+type Void is primitive
+
+type Str is primitive
+
+type Pointer is primitive
+
+fn printf(fmt: Str, x: Int, y: Int): Void
+
+fn allocObject(size: Pointer): Pointer
+
+fn mark(ptr: Pointer): Void
+
+type Pair = { x: Int, y: Int}
+
+type Human = { a: Pair }
+
+global fn main(): Int := (
+  for i: Int := 0 to 5 do (
+    for j: Int := 0 to 5 do (
+      let
+        var z: Int := i * 2
+      in
+        if i < 2
+	then 
+          printf("i = %d, i * 2 = %d\n", i, z)
+	else
+	  printf("i = %d, i + i * 2 = %d\n", i, i + z);
+	0
+      end
+    )
+  );
+  
+  0 
+)

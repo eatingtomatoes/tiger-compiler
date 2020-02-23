@@ -8,7 +8,8 @@ dq 0x1234321
 dq 2
 dq 0
 dq 0
-label_8: db "%d", 0xa, "%d", 0xa, "", 0x0
+label_13: db "i = %d, i + i * 2 = %d", 0xa, "", 0x0
+label_12: db "i = %d, i * 2 = %d", 0xa, "", 0x0
 [section .text]
 global main
 extern mark
@@ -17,63 +18,58 @@ extern printf
 main:
 push rbp
 mov rbp, rsp
-sub rsp, 40
+sub rsp, 48
 mov [rbp - 8], r10
 push rbx
-lea rbx, [rbp - 16]
-mov [rbp - 40], rbx
-mov r10, rbp
-mov rdi, label_7_Human
-xor rax, rax
-call allocObject
-mov rbx, rax
-mov rcx, rbx
-add rcx, 16
-mov rcx, [rcx]
-mov [rbp - 24], rcx
-mov rcx, [rbp - 24]
-mov [rbp - 32], rcx
-mov r10, rbp
-mov rdi, label_6_Pair
-xor rax, rax
-call allocObject
-mov rcx, rax
-add rcx, 16
-mov rcx, [rcx]
-mov qword [rcx], 123
-mov rcx, rax
-add rcx, 16
-mov rcx, [rcx]
-mov qword [rcx + 8], 456
-mov rcx, [rbp - 32]
-mov [rcx], rax
-mov rax, [rbp - 40]
-mov [rax], rbx
-mov r10, rbp
-mov rdi, label_8
-mov rax, [rbp - 16]
-add rax, 16
-mov rax, [rax]
-mov rax, [rax]
-add rax, 16
 mov rbx, 0
-add rbx, [rax]
+mov rax, -16
+add rax, rbp
+mov [rbp - 24], rax
+label_8:
+cmp rbx, 5
+jnl label_9
+mov rax, [rbp - 24]
+mov [rbp - 40], rax
 xor rdx, rdx
-mov rax, 3
-mov rcx, 6
+mov rax, rbx
+mov rcx, 2
 imul rcx
-mov rcx, rax
-mov rsi, [rbx]
-add rsi, rcx
-mov rbx, [rbp - 16]
-add rbx, 16
-mov rbx, [rbx]
-mov rbx, [rbx]
-add rbx, 16
-mov rbx, [rbx]
-mov rdx, [rbx + 8]
+mov [rbp - 32], rax
+label_10:
+cmp qword [rbp - 48], 5
+jnl label_11
+mov rcx, [rbp - 32]
+mov rdx, [rbp - 40]
+mov [rdx], rcx
+cmp rbx, 2
+jnl label_15
+mov rcx, [rbp - 40]
+mov rdx, [rcx]
+mov r10, rbp
+mov rdi, label_12
+mov rsi, rbx
 xor rax, rax
 call printf
+label_16:
+mov rcx, [rbp - 48]
+add rcx, 1
+mov [rbp - 48], rcx
+jmp label_10
+label_15:
+mov rcx, [rbp - 40]
+mov rcx, [rcx]
+mov rdx, rbx
+add rdx, rcx
+mov r10, rbp
+mov rdi, label_13
+mov rsi, rbx
+xor rax, rax
+call printf
+jmp label_16
+label_11:
+add rbx, 1
+jmp label_8
+label_9:
 mov rax, 0
 pop rbx
 leave

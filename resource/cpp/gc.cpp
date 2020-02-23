@@ -61,16 +61,6 @@ BlockInfo* ObjectPool::tryAllocObject(const ObjectInfo* info)
         return nullptr;
     }
 
-    // for (uint64_t i = 0; i < info->size; ++i) {
-    //     if (const ObjectInfo* finfo = info->fields[i]) {
-    //         if (BlockInfo* subobject = tryAllocObject(finfo)) {
-    //             iter->object[i] = subobject;
-    //         } else {
-    //             return nullptr;
-    //         }
-    //     }
-    // }
-
     if (iter->size > info->size) {
         auto created = desc_.insert(iter, { .magic = BLOCK_INFO_MAGIC, .info = info, .object = iter->object, .size = info->size, .marked = false });
         iter->object += info->size;
