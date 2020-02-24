@@ -23,5 +23,5 @@ instance Ord v => Graph (MapBasedGraphForScalar v) where
   disconnect x y = disconnectTo x y . disconnectTo y x
   isConnected x y g = doesConnectTo x y g || doesConnectTo y x g
   neighborOf x = fmap Set.toList . neighborSetOf x 
-  neighborSetOf x g = Set.union <$> predSetOf x g <*> succOf x g
+  neighborSetOf x g = Set.union <$> predOf x g <*> succOf x g
   

@@ -93,25 +93,13 @@ instance Ord v => DirectedGraph (MapBasedDirectedGraph v d) where
 
   succOf x = fmap (from . _mdgnSuccs) . getNode x
 
-  -- succOf x = fmap Set.toList . succSetOf x
+  predOf x = fmap (from . _mdgnPrevs) . getNode x
 
-  -- succSetOf x = fmap _mdgnSuccs . getNode x
-
-  predOf x = fmap Set.toList . predSetOf x
-
-  predSetOf x = fmap _mdgnPrevs . getNode x
-
-  vertexOf = views mdgMap Map.keys
-
-  vertexSetOf = views mdgMap Map.keysSet
+  vertexOf = views mdgMap $ from . Map.keysSet
  
-  flattenData = Map.toList . Map.map _mdgnData . _mdgMap
+  flattenData = from . Map.map _mdgnData . _mdgMap
 
-  flattenSucc = fmap (over _2 Set.toList) . flattenSuccSet
+  flattenSucc = from . Map.map _mdgnSuccs . _mdgMap
 
-  flattenSuccSet = Map.toList . Map.map _mdgnSuccs . _mdgMap
-
-  flattenPred = fmap (over _2 Set.toList) . flattenPredSet
+  flattenPred = from . Map.map _mdgnPrevs . _mdgMap
   
-  flattenPredSet = Map.toList . Map.map _mdgnPrevs . _mdgMap
-

@@ -39,6 +39,7 @@ import Translation.AstToTree.TransState
 import Translation.AstToTree
 import Translation.TreeToQuadruple
 import Translation.QuadrupleToSSA
+import Translation.SSAToQuadruple
 
 import MiddleEnd.Tree.InstructionSelection
 import qualified MiddleEnd.Quadruple.InstructionSelection as QInstSel
@@ -106,24 +107,45 @@ runCompiler = do
                     `andThen` eliminateDeadCode vocal
                     `andThen` hoist vocal   
 
-              zoom _1 . QInstSel.selectFunBody =<< case _optimizeQuadruple of
+              quads <- case _optimizeQuadruple of
                 False -> return quads
                 _ -> do
-                  
-                  optimized <- runOptimizer optimizer quads 
-  
-                  when (_optimizeQuadruple && _dumpOptimizedQuadruple)  $ do
-                    pPrint "optimized quadruple:"
-                    pPrint $ fmap show $ zip [0..] optimized
+                  quads <- runOptimizer optimizer quads
+                  when _dumpOptimizedQuadruple $ do
+                    pPrint "optimized quadruples:"
+                    pPrint $ fmap show $ zip [0..] quads
+                  return quads
 
-                  return optimized
-  
-                -- let cfg = buildControlFlowGraph' quads'
-                -- let tree = buildDominatorTree quads'
-                -- let ssa = transQuadrupleToSSA quads'
-                -- pPrint $ fmap show $ zip [0..] ssa
-                -- pPrint $ toDirectedGraphviz "ssacfg" $ SSACFG.buildControlFlowGraph' ssa 
-                -- pPrint $ toDirectedGraphviz "tree" 
+              quads <- case _useSSA of
+                False -> return quads
+                _ -> do
+                  let ssa = transQuadrupleToSSA quads
+
+                  when _dumpSSA $ do
+                    pPrint "ssa:"
+                    pPrint $ fmap show $ zip [0..] ssa
+
+                  quads <- zoom _1 $ transSSAToQuadruple ssa
+
+                  when _dumpQuadrupleFromSSA $ do
+                    pPrint "quadruples from ssa:"
+                    pPrint $ fmap show $ zip [0..] quads
+
+                  quads <- case _optimizeQuadrupleFromSSA of
+                    False -> return quads
+                    _ -> do
+                      quads <- runOptimizer optimizer quads
+
+                      when _dumpOptimizedQuadrupleFromSSA $ do
+                        pPrint "optimized quadruples from ssa"
+                        pPrint $ fmap show $ zip [0..] quads
+
+                      return quads
+
+                  return quads
+                       
+              zoom _1 $ QInstSel.selectFunBody quads
+              
         insts <- zoom _1 $ do
           let fun = funHeader <> funBody <> funTail
 

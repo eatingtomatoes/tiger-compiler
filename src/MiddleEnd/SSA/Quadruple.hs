@@ -2,6 +2,12 @@ module MiddleEnd.SSA.Quadruple
   ( TaggedTemp (..)
   , Var (..)
   , Quadruple (..)
+  , isTempV
+  , isLabelQ
+  , isBranchQ
+  , isPhiQ
+  , branchDstOf
+  , labelOf
   ) where
 
 import Data.Char.Small
@@ -60,3 +66,32 @@ instance Show Quadruple where
     MoveQ t v -> printf "%s <- %s" (show t) (show v)
     PhiQ t ts -> printf "%s <- phi(%s)" (show t) (concat $ intersperse "," $ fmap show ts)
 
+isTempV :: Var -> Bool
+isTempV (TempV _) = True
+isTempV _ = False
+
+isLabelQ :: Quadruple -> Bool
+isLabelQ q = case q of
+  LabelQ _ -> True
+  _ -> False
+
+isBranchQ :: Quadruple -> Bool
+isBranchQ q = case q of
+  JumpQ _ -> True
+  CJumpQ _ _ _ _ _ -> True
+  _ -> False
+
+isPhiQ :: Quadruple -> Bool
+isPhiQ (PhiQ _ _) = True
+isPhiQ _ = False
+
+branchDstOf :: Quadruple -> Maybe [Label]
+branchDstOf q = case q of
+  JumpQ l -> Just [l]
+  CJumpQ _ _ _ l1 l2 -> Just [l1, l2]
+  _ -> Nothing
+  
+labelOf :: Quadruple -> Maybe Label
+labelOf q = case q of
+  LabelQ l -> Just l
+  _ -> Nothing

@@ -52,27 +52,15 @@ instance Ord v => DirectedGraph (MapBasedDirectedGraphForScalar v) where
 
   succOf x = views mdgiMap $ succOf x
   
-  -- succOf x = views mdgiMap $ succOf x
-
-  -- succSetOf x = views mdgiMap $ succSetOf x
-  
   predOf x = views mdgiMap $ predOf x
 
-  predSetOf x = views mdgiMap $ predSetOf x
-
   vertexOf = views mdgiMap vertexOf
-
-  vertexSetOf = views mdgiMap vertexSetOf
 
   flattenData = flattenData . _mdgiMap
 
   flattenSucc = flattenSucc . _mdgiMap
 
-  flattenSuccSet = flattenSuccSet . _mdgiMap
-
   flattenPred = flattenPred . _mdgiMap
-  
-  flattenPredSet = flattenPredSet . _mdgiMap
 
 
 instance (Ord v, Show v) => DrawableDirectedGraph (MapBasedDirectedGraphForScalar v) where

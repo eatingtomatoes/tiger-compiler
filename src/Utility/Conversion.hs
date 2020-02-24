@@ -16,6 +16,8 @@ instance Conversion f f where
 
 instance Conversion (Set.Set a) [a] where
   from = Set.toList
-  
-instance Conversion (Map.Map k v) [(k, v)] where
+
+type KVList k v = [(k, v)]
+
+instance Conversion (Map.Map k v) (KVList k v) where
   from = Map.toList

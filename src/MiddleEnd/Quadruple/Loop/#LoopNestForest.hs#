@@ -10,10 +10,9 @@ module MiddleEnd.Quadruple.Loop.LoopNestForest
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Data.Maybe (fromMaybe)
 import Safe (headMay)
 import Debug.Pretty.Simple
-import Utility.Debug
+
 
 import MiddleEnd.Quadruple.Loop.Dominance
  
@@ -25,9 +24,8 @@ type LoopNestForest = Map.Map Int (Set.Set Int{-exit-node-}, Set.Set Int{-nested
 --     f (i, doms) = any (maybe False (elem i) . cfgSuccOf) doms
 
 calcLoopHeaders :: (Int -> Maybe [Int]) -> DominanceGraph -> Set.Set Int
-calcLoopHeaders cfgSuccOf graph = Set.fromList $ fmap fst $ filter f $ flattenSucc graph 
+calcLoopHeaders cfgSuccOf graph = Set.fromList $ fmap fst $ filter f $ flattenSucc graph
   where
-    f :: (Int, Set.Set Int) -> Bool
     f (i, doms) = any (maybe False (elem i) . cfgSuccOf) doms
 
 
@@ -37,23 +35,21 @@ buildLoopNestForest loopHeaders cfgSuccOf tree = calc [-1] 0 (Map.singleton (-1)
     calc :: [Int] -> Int -> LoopNestForest -> LoopNestForest
     calc ctx{-outer loop headers-} i{-instruction id-} forest
       = maybe forest' (foldr (calc ctx') forest') $ (succOf i tree :: Maybe (Set.Set Int))
-      where 
+      where
         (forest', ctx') = case Set.member i loopHeaders of
           True -> (Map.insert i mempty $ maybe id (Map.alter $ f i) (headMay ctx) forest, i : ctx)
-          _ -> case fmap (Set.lookupMin . Set.intersection loopHeaders) $ cfgSuccOf i of
-            Just (Just h)
-              | elem h ctx -> (Map.alter (g i) h forest, dropWhile (/= h) ctx)
-              -- | otherwise -> error $ "buildLoopNestForest: encountered a loop tail "
-              --   <> quote i
-              --   <> " whose corresponding header "
-              --   <> quote h
-              --   <> " wasn't in the ctx"
+          _ -> case Set.toList $ maybe mempty Set.fromList (cfgSuccOf i) `Set.intersection` loopHeaders of
+            h : _ | not $ elem h ctx -> (forest, ctx)
+            h : _ -> case ctx of
+              c : cs | h == c -> (Map.alter (g i) c forest, cs)
+              _ : _ -> (Map.alter (g i) h forest, dropWhile (/= h) ctx)
+              _ -> error $  "encountered an exit node `" <> show i <> "' whose header is `" <> show h <> "' while the ctx is empty in buildLoopNestForest"
             _ -> (forest, ctx)
-            
-    f i Nothing = error $ "unexpected loop header " <> quote i <> " in ctx but forest in buildLoopNestForest"
+        
+    f _ Nothing = error "unexpected loop header in ctx but forest in buildLoopNestForest"
     f i (Just (exits, nested)) = Just (exits, Set.insert i nested)
 
-    g i Nothing = error $ "unexpected loop header " <> quote i <> " in ctx but forest in buildLoopNestForest"
+    g _ Nothing = error "unexpected loop header in ctx but forest in buildLoopNestForest"
     g i (Just (exits, nested)) = Just (Set.insert i exits, nested)
 
 data LoopNestTree

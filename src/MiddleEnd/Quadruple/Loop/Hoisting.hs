@@ -51,7 +51,8 @@ hoist_ trace quads entry invariants = do
       Just q -> fmap (trace "hoist" ("hoisting " <> quote q)) $ case q of
         BinQ t op v1 v2 -> Just (BinQ temp op v1 v2, MoveQ t (TempV temp))
         UnQ t op v1 -> Just (UnQ temp op v1, MoveQ t (TempV temp))
-        -- MoveQ t v1 | not (isTempV v1) -> Just (MoveQ temp v1, MoveQ t (TempV temp))
+        -- The next branch cannot be deleted, or the constant assignment will be deleted.
+        MoveQ t v1 | not (isTempV v1) -> Just (MoveQ temp v1, MoveQ t (TempV temp)) 
         _ -> Nothing
   let quads' = foldr f quads $ zip sortedInvariants qbs
       (former, latter) = splitAt entry quads'

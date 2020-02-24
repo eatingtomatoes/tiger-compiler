@@ -6,6 +6,7 @@
 module Utility.DirectedGraph.MapBasedDirectedGraph.BlockControlFlowGraph
   ( BlockControlFlowGraph
   , buildBlockControlFlowGraph
+  , module Utility.DirectedGraph.MapBasedDirectedGraph 
   ) where
 
 import Data.List.Split (split, keepDelimsL, keepDelimsR, whenElt)

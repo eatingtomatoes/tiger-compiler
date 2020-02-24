@@ -46,7 +46,7 @@ buildDominanceGraph num cfgPredOf = foldr f empty $ zip [0..] dominators
 buildDominanceTree :: DominanceGraph -> DominanceTree
 buildDominanceTree graph
   = foldr (\(v, d) -> connectTo d v) empty
-  $ mapMaybe (\v -> predSetOf v graph >>= f . (v, ))
+  $ mapMaybe (\v -> predOf v graph >>= f . (v, ))
   $ vertexOf graph
   where
     f :: (Int, Set.Set Int) -> Maybe (Int, Int)

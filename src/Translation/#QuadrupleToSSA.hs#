@@ -43,16 +43,11 @@ data RenamingContext
   , _rcBlocks :: Map.Map Int IBlock
   } deriving (Show)
 
+-- makeLenses ''IBlock
 makeLensesFor [("_ibPhis", "ibPhis")] ''IBlock
 makeLenses ''RenamingContext
 
-transQuadrupleToSSA :: [Quadruple] -> [SQ.Quadruple]
-transQuadrupleToSSA quads = placePhiFunction dominanceTree bcfg phiVars
-  where
-    bcfg = buildBlockControlFlowGraphForQuadruple quads    
-    dominanceTree = buildDominanceTree $ buildDominanceGraph (length quads) (flip predOf bcfg)
-    phiVars = calcPhiVars bcfg $ calcDominanceFrontier (flip succOf bcfg) (flip succOf dominanceTree)
-
+-- placePhiFunction :: DominanceTree -> BlockControlFlowGraph Quadruple -> Map.Map Int (Set.Set Temp) -> [SQ.Quadruple]
 placePhiFunction :: DominanceTree -> BlockControlFlowGraph Quadruple -> Bucket.Bucket Int Temp -> [SQ.Quadruple]
 placePhiFunction dominatorTree bcfg phiVars
   = concat
@@ -65,6 +60,7 @@ placePhiFunction dominatorTree bcfg phiVars
   , _rcBlocks = toIBlocks bcfg phiVars
   }
   where
+    -- blockToQuads IBlock{..} = {-pTrace (show "iblock: " <> show ib) $ -}fmap f _ibPhis <> fmap g _ibQuads
     blockToQuads IBlock{..} = case fmap g _ibQuads of
       l@(SQ.LabelQ _) : rest -> l : (fmap f _ibPhis <> rest)
       qs -> fmap f _ibPhis <> qs
@@ -87,20 +83,20 @@ placePhiFunction dominatorTree bcfg phiVars
             return $ (catMaybes ts, qs)
           modifying rcBlocks $ Map.insert i (IBlock qs ps) 
             
-          forM_ (fromMaybe mempty $ succOf i bcfg :: Set.Set Int) $ \next -> do
+          forM_ (maybe mempty toList $ succOf i bcfg) $ \next -> do
             gets (Map.lookup next . _rcBlocks) >>= \case
               Nothing -> error $ "encountered an unknown block `" <> show next <> "`"
               Just iblock -> do
                 let pos = case predOf next bcfg of
                       Nothing -> error $ printf "encountered a successor(`%s') of `%s' which is not in the block control flow graph in rename" (show next) (show i)
                       Just prevs ->do
-                        case headMay $ filter ((== i) . snd) $ zip [(0 :: Int)..] prevs of
+                        case headMay $ filter ((== i) . snd) $ zip [(0 :: Int)..] $ toList prevs of
                           Nothing -> error $ printf "encountered a successor(`%s') of `%s' whose predecessors set doesn't include `%s' in rename" (show next) (show i) (show i)
                           Just (k, _) -> k
                 ps' <- mapM (addVar pos) $ view ibPhis iblock 
                 modifying rcBlocks $ Map.insert next $ iblock { _ibPhis = ps' }
 
-          mapM_ rename (fromMaybe mempty $ succOf i dominatorTree :: Set.Set Int)
+          mapM_ rename (maybe mempty toList $ succOf i dominatorTree)
 
           mapM_ popt $ ts1 <> ts2
       where
@@ -180,7 +176,7 @@ placePhiFunction dominatorTree bcfg phiVars
         counterOf t = gets $ maybe (0, mempty) id . Map.lookup t . _rcCounter
 
 toIBlocks :: BlockControlFlowGraph Quadruple -> Bucket.Bucket Int Temp -> Map.Map Int IBlock
-toIBlocks bcfg phiVars = Map.fromList $ fmap f $ (flattenData bcfg :: [(Int, [Quadruple])])
+toIBlocks bcfg phiVars = Map.fromList $ fmap f $ flattenData bcfg   
   where
     f (i, qs) = (i, IBlock { _ibQuads = qs', _ibPhis = ps' })
       where
@@ -213,7 +209,7 @@ calcPhiVars bcfg frontiers = foldr f mempty $ Bucket.toList initialDefsites
                 else Set.insert ft bs_
     
     defs :: Bucket.Bucket Int Temp
-    defs= foldr g mempty $ (vertexOf bcfg :: Set.Set Int)
+    defs= foldr g mempty $ vertexOf bcfg
       where
         g v = maybe mempty (flip (foldr (Bucket.insert v))) $ do
           qs <- dataOf v bcfg
@@ -221,3 +217,10 @@ calcPhiVars bcfg frontiers = foldr f mempty $ Bucket.toList initialDefsites
 
     initialDefsites :: Bucket.Bucket Temp Int
     initialDefsites = Bucket.reverse defs
+
+transQuadrupleToSSA :: [Quadruple] -> [SQ.Quadruple]
+transQuadrupleToSSA quads = placePhiFunction dominanceTree bcfg phiVars
+  where
+    bcfg = buildBlockControlFlowGraphForQuadruple quads    
+    dominanceTree = buildDominanceTree $ buildDominanceGraph (length quads) (flip predOf bcfg)
+    phiVars = calcPhiVars bcfg $ calcDominanceFrontier (flip succOf bcfg) (flip succOf dominanceTree)
